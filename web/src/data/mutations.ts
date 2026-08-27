@@ -51,7 +51,7 @@ export async function queueMessageCreate(
   me: Me
 ): Promise<Message> {
   const timestamp = now()
-  const message: Message = {
+  const message: Message & { body: string } = {
     id: crypto.randomUUID(),
     topic_id: topicId,
     author_id: me.user_id,
@@ -93,7 +93,7 @@ export async function queueMessageUpdate(database: TextYourselfDatabase, message
 export async function queueMessageDelete(database: TextYourselfDatabase, message: Message): Promise<void> {
   const timestamp = now()
   await database.transaction('rw', database.messages, database.outbox, async () => {
-    await database.messages.put({ ...message, body: '', deleted_at: timestamp, updated_at: timestamp, _status: 'pending' })
+    await database.messages.put({ ...message, body: null, deleted_at: timestamp, updated_at: timestamp, _status: 'pending' })
     await database.outbox.add({ mutation: { type: 'delete_message', message_id: message.id }, created_at: timestamp })
   })
 }

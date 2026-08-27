@@ -8,7 +8,8 @@ export interface SafeLink {
   domain: string
 }
 
-export function extractSafeLinks(body: string): SafeLink[] {
+export function extractSafeLinks(body: string | null): SafeLink[] {
+  if (body === null) return []
   return [...body.matchAll(URL_PATTERN)].flatMap((match) => {
     const url = match[0].replace(TRAILING_PUNCTUATION, '')
     try {
@@ -21,7 +22,8 @@ export function extractSafeLinks(body: string): SafeLink[] {
   })
 }
 
-export function linkify(body: string): ReactNode[] {
+export function linkify(body: string | null): ReactNode[] {
+  if (body === null) return []
   const output: ReactNode[] = []
   let cursor = 0
   for (const match of body.matchAll(URL_PATTERN)) {

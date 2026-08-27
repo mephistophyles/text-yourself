@@ -109,4 +109,27 @@ describe('SyncEngine', () => {
     expect((await store.outbox.toArray())[0]?.blocked).toBe(true)
     expect((await store.topics.toArray())[0]?._error).toBe('Not allowed.')
   })
+
+  it('stores a server-synced soft deletion without retaining its body', async () => {
+    const store = database()
+    const deleted: Message = {
+      id: '00000000-0000-4000-8000-000000000030',
+      topic_id: '00000000-0000-4000-8000-000000000020',
+      author_id: me.user_id,
+      author_display_name: me.display_name,
+      body: null,
+      reply_to_id: null,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-02T00:00:00Z',
+      edited_at: null,
+      deleted_at: '2026-01-02T00:00:00Z',
+      sync_version: 3
+    }
+    const page: SyncPage = { changes: [{ kind: 'message', data: deleted }], next_version: 3, has_more: false }
+    const client = mockClient({ sync: vi.fn(async () => page) })
+
+    await new SyncEngine(store, client).run()
+
+    expect((await store.messages.get(deleted.id))?.body).toBeNull()
+  })
 })

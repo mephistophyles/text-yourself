@@ -17,4 +17,10 @@ describe('MessageContent', () => {
     render(<MessageContent body="Do not open javascript:alert(1)" />)
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
+
+  it('renders no content or links for a deleted null body', () => {
+    const { container } = render(<MessageContent body={null} />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(container).toHaveTextContent('')
+  })
 })

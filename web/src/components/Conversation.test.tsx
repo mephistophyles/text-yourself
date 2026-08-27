@@ -37,4 +37,12 @@ describe('Conversation', () => {
     expect(screen.getByText('Morgan')).toBeInTheDocument()
     expect(screen.getByText('Try the north corner')).toBeInTheDocument()
   })
+
+  it('renders a server-synced null body only as a deletion placeholder', () => {
+    const deleted = { ...message, body: null, deleted_at: '2026-01-02T00:00:00Z' }
+    render(<Conversation topic={topic} messages={[deleted]} me={me} jumpMessageId={null} onJumpHandled={vi.fn()} onBack={vi.fn()}
+      onRename={vi.fn()} onArchive={vi.fn()} onSend={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.getByText('Message deleted')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reply' })).not.toBeInTheDocument()
+  })
 })

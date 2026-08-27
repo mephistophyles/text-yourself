@@ -1,6 +1,6 @@
 import { extractSafeLinks, linkify } from '../lib/format'
 
-export function MessageContent({ body }: { body: string }) {
+export function MessageContent({ body }: { body: string | null }) {
   const links = extractSafeLinks(body)
   return (
     <>

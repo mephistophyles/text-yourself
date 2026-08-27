@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../data/api'
 import { db } from '../data/db'
-import type { SearchHit, Topic } from '../data/types'
+import type { Message, SearchHit, Topic } from '../data/types'
 import { useLiveData } from '../hooks/useLiveData'
 import { formatTimestamp } from '../lib/format'
 import { CloseIcon, SearchIcon } from './Icons'
@@ -11,6 +11,31 @@ interface Props {
   topics: Topic[]
   onClose(): void
   onJump(topicId: string, messageId?: string): void
+}
+
+export function buildLocalSearchHits(topics: Topic[], messages: Message[], normalized: string): SearchHit[] {
+  if (!normalized) return []
+  const hits: SearchHit[] = []
+  for (const topic of topics) {
+    if (topic.title.toLocaleLowerCase().includes(normalized)) {
+      hits.push({ kind: 'topic', topic_id: topic.id, topic_title: topic.title, excerpt: topic.title, created_at: topic.created_at })
+    }
+  }
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]))
+  for (const message of messages) {
+    if (message.deleted_at || message.body === null || !message.body.toLocaleLowerCase().includes(normalized)) continue
+    const topic = topicById.get(message.topic_id)
+    if (!topic) continue
+    hits.push({
+      kind: 'message',
+      topic_id: topic.id,
+      topic_title: topic.title,
+      message_id: message.id,
+      excerpt: message.body,
+      created_at: message.created_at
+    })
+  }
+  return hits.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100)
 }
 
 export function SearchPanel({ topics, onClose, onJump }: Props) {
@@ -43,28 +68,7 @@ export function SearchPanel({ topics, onClose, onJump }: Props) {
   }, [normalized])
 
   const localHits = useMemo(() => {
-    if (!normalized) return []
-    const hits: SearchHit[] = []
-    for (const topic of topics) {
-      if (topic.title.toLocaleLowerCase().includes(normalized)) {
-        hits.push({ kind: 'topic', topic_id: topic.id, topic_title: topic.title, excerpt: topic.title, created_at: topic.created_at })
-      }
-    }
-    const topicById = new Map(topics.map((topic) => [topic.id, topic]))
-    for (const message of messages) {
-      if (message.deleted_at || !message.body.toLocaleLowerCase().includes(normalized)) continue
-      const topic = topicById.get(message.topic_id)
-      if (!topic) continue
-      hits.push({
-        kind: 'message',
-        topic_id: topic.id,
-        topic_title: topic.title,
-        message_id: message.id,
-        excerpt: message.body,
-        created_at: message.created_at
-      })
-    }
-    return hits.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100)
+    return buildLocalSearchHits(topics, messages, normalized)
   }, [messages, normalized, topics])
 
   const hits = useMemo(() => {

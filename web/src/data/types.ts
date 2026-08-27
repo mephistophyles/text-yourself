@@ -25,7 +25,7 @@ export interface Message {
   topic_id: string
   author_id: string
   author_display_name: string
-  body: string
+  body: string | null
   reply_to_id: string | null
   created_at: string
   updated_at: string
@@ -49,7 +49,7 @@ export interface SyncPage {
 export type Mutation =
   | { type: 'create_topic'; topic: Topic }
   | { type: 'update_topic'; topic_id: string; changes: { title?: string; archived?: boolean } }
-  | { type: 'create_message'; message: Message }
+  | { type: 'create_message'; message: Message & { body: string } }
   | { type: 'update_message'; message_id: string; body: string }
   | { type: 'delete_message'; message_id: string }
 

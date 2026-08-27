@@ -87,7 +87,7 @@ export function Conversation(props: Props) {
         {props.messages.length === 0 ? <div className="empty-thread"><p>No notes here yet.</p><span>Write the first one below.</span></div> : props.messages.map((message) => {
           const own = message.author_id === props.me?.user_id
           const replied = message.reply_to_id ? byId.get(message.reply_to_id) : undefined
-          const deleted = Boolean(message.deleted_at)
+          const deleted = Boolean(message.deleted_at) || message.body === null
           return <article
             id={`message-${message.id}`}
             tabIndex={-1}
@@ -97,7 +97,7 @@ export function Conversation(props: Props) {
             <div className="message-meta"><strong>{message.author_display_name}</strong><time dateTime={message.created_at}>{formatTimestamp(message.created_at)}</time></div>
             <div className="message-card">
               {replied && <button className="quoted-reply" onClick={() => document.getElementById(`message-${replied.id}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })}>
-                <ThreadMark id={message.topic_id} small /><span><strong>{replied.author_display_name}</strong>{replied.deleted_at ? 'Deleted message' : replied.body.slice(0, 120)}</span>
+                <ThreadMark id={message.topic_id} small /><span><strong>{replied.author_display_name}</strong>{replied.deleted_at || replied.body === null ? 'Deleted message' : replied.body.slice(0, 120)}</span>
               </button>}
               {editing?.id === message.id ? <form className="edit-form" onSubmit={async (event) => { event.preventDefault(); if (editBody.trim()) await props.onEdit(message, editBody); setEditing(null) }}>
                 <label className="sr-only" htmlFor={`edit-${message.id}`}>Edit message</label>
@@ -110,7 +110,7 @@ export function Conversation(props: Props) {
               {message._status && <span className={`delivery-state delivery-state--${message._status}`}>{message._status === 'pending' ? 'Waiting to sync' : `Couldn’t sync${message._error ? `: ${message._error}` : ''}`}</span>}
               {canEdit && !deleted && <span className="message-actions">
                 <button onClick={() => { setReplyingTo(message); composerRef.current?.focus() }}><ReplyIcon /> Reply</button>
-                {own && <><button onClick={() => { setEditing(message); setEditBody(message.body) }}>Edit</button><button onClick={() => { if (window.confirm('Delete this message? It will remain recoverable in the database.')) void props.onDelete(message) }}>Delete</button></>}
+                {own && <><button onClick={() => { setEditing(message); setEditBody(message.body ?? '') }}>Edit</button><button onClick={() => { if (window.confirm('Delete this message? It will remain recoverable in the database.')) void props.onDelete(message) }}>Delete</button></>}
               </span>}
             </div>
           </article>
@@ -119,7 +119,7 @@ export function Conversation(props: Props) {
       </section>
 
       {canEdit ? <form className="composer" onSubmit={send}>
-        {replyingTo && <div className="reply-banner"><ReplyIcon /><span>Replying to <strong>{replyingTo.author_display_name}</strong>: {replyingTo.body.slice(0, 90)}</span><button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><CloseIcon /></button></div>}
+        {replyingTo && <div className="reply-banner"><ReplyIcon /><span>Replying to <strong>{replyingTo.author_display_name}</strong>: {replyingTo.body?.slice(0, 90) ?? 'Deleted message'}</span><button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><CloseIcon /></button></div>}
         <label className="sr-only" htmlFor="message-body">Write a message</label>
         <textarea ref={composerRef} id="message-body" rows={1} maxLength={10000} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Leave a note…" onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
