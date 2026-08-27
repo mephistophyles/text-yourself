@@ -82,7 +82,7 @@ export MIGRATIONS_PATH="$PWD/migrations"
 
 PYTHONPATH=src python -m text_yourself.migrate
 npm run build --prefix web
-PYTHONPATH=src uvicorn text_yourself.app:app --host 127.0.0.1 --port 8000
+PYTHONPATH=src uvicorn text_yourself.main:app --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:8000`. Using a production web build here exercises the same
