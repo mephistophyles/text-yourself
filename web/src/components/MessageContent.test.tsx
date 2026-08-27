@@ -1,0 +1,20 @@
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { MessageContent } from './MessageContent'
+
+describe('MessageContent', () => {
+  it('renders HTTP links as safe external links and domain cards', () => {
+    render(<MessageContent body="The details are at https://example.com/plans." />)
+
+    const links = screen.getAllByRole('link')
+    expect(links).toHaveLength(2)
+    expect(links[0]).toHaveAttribute('href', 'https://example.com/plans')
+    expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByText('example.com')).toBeInTheDocument()
+  })
+
+  it('does not turn non-web schemes into links', () => {
+    render(<MessageContent body="Do not open javascript:alert(1)" />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+})
