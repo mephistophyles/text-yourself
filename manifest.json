@@ -1,0 +1,9 @@
+{
+  "slug": "text-yourself",
+  "name": "Text Yourself",
+  "kind": "app",
+  "description": "Shared, topic-based household message threads that also work offline",
+  "group": "household",
+  "access": ["me", "household"],
+  "status": "active"
+}

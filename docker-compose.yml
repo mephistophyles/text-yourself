@@ -1,0 +1,34 @@
+name: text-yourself
+
+services:
+  app:
+    image: ghcr.io/mephistophyles/text-yourself:${TAG:-latest}
+    restart: unless-stopped
+    env_file: [.env.runtime]
+    networks: [homenet]
+    ports:
+      - "127.0.0.1:8000:8000"
+    mem_limit: 512m
+    stop_grace_period: 10s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=4)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  migrate:
+    image: ghcr.io/mephistophyles/text-yourself:${TAG:-latest}
+    command: ["python", "-m", "text_yourself.migrate"]
+    env_file: [.env.runtime]
+    networks: [homenet]
+    profiles: [migration]
+    restart: "no"
+
+networks:
+  homenet:
+    external: true
