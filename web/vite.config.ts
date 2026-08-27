@@ -7,7 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['thread-mark.svg', 'pwa-icon.svg'],
+      includeAssets: [
+        'thread-mark.svg',
+        'pwa-icon.svg',
+        'pwa-icon-192.png',
+        'pwa-icon-512.png',
+        'apple-touch-icon.png'
+      ],
       manifest: {
         name: 'Text Yourself',
         short_name: 'Text Yourself',
@@ -15,9 +21,12 @@ export default defineConfig({
         theme_color: '#162433',
         background_color: '#F7F9FA',
         display: 'standalone',
+        id: '/',
         start_url: '/',
         icons: [
-          { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }
+          { src: '/pwa-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+          { src: '/pwa-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: '/pwa-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
         ]
       },
       workbox: {

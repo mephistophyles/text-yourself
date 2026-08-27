@@ -35,3 +35,7 @@ backend. No dependency fetches content or sends analytics at runtime.
   it is retained in origin-local storage for offline attribution.
 - The service worker caches only the built application shell. API data remains in
   IndexedDB and is not duplicated in the HTTP cache.
+- The install manifest carries SVG plus opaque 192px and 512px PNG icons, and the
+  document declares a 180px Apple touch icon. The raster fallbacks are generated
+  from the checked-in SVG source to keep Chromium and Apple Home Screen behavior
+  consistent without maintaining separate artwork.
