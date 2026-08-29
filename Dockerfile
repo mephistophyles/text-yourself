@@ -9,7 +9,7 @@ COPY web/ ./
 RUN npm run build
 
 
-FROM python:3.13.15-slim-bookworm AS python-builder
+FROM python:3.14.7-slim-bookworm AS python-builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -22,7 +22,7 @@ COPY requirements.txt ./
 RUN pip install --requirement requirements.txt
 
 
-FROM python:3.13.15-slim-bookworm AS runtime
+FROM python:3.14.7-slim-bookworm AS runtime
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH=/app/src \
