@@ -7,7 +7,7 @@ services:
     env_file: [.env.runtime]
     networks: [homenet]
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8000"
     mem_limit: 512m
     stop_grace_period: 10s
     healthcheck:

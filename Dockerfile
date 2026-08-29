@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22.19.0-bookworm-slim AS web-builder
+FROM node:22.22.0-bookworm-slim AS web-builder
 
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
@@ -9,7 +9,7 @@ COPY web/ ./
 RUN npm run build
 
 
-FROM python:3.13.7-slim-bookworm AS python-builder
+FROM python:3.13.15-slim-bookworm AS python-builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -22,7 +22,7 @@ COPY requirements.txt ./
 RUN pip install --requirement requirements.txt
 
 
-FROM python:3.13.7-slim-bookworm AS runtime
+FROM python:3.13.15-slim-bookworm AS runtime
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH=/app/src \
