@@ -23,6 +23,7 @@ class Settings:
     web_dist_path: Path = Path("/app/web-dist")
     pool_min_size: int = 1
     pool_max_size: int = 5
+    voice_note_max_bytes: int = 2_000_000
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -36,6 +37,10 @@ class Settings:
         default_role = os.environ.get("DEV_USER_ROLE", "editor")
         if default_role not in {"editor", "viewer"}:
             raise RuntimeError("DEV_USER_ROLE must be 'editor' or 'viewer'")
+
+        voice_note_max_bytes = _positive_int("VOICE_NOTE_MAX_BYTES", 2_000_000)
+        if voice_note_max_bytes > 8_000_000:
+            raise RuntimeError("VOICE_NOTE_MAX_BYTES cannot exceed the 8000000 byte column limit")
 
         pool_min_size = _positive_int("DB_POOL_MIN_SIZE", 1)
         pool_max_size = _positive_int("DB_POOL_MAX_SIZE", 5)
@@ -53,6 +58,7 @@ class Settings:
             web_dist_path=Path(os.environ.get("WEB_DIST_PATH", "/app/web-dist")),
             pool_min_size=pool_min_size,
             pool_max_size=pool_max_size,
+            voice_note_max_bytes=voice_note_max_bytes,
         )
 
 

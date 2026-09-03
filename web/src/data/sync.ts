@@ -1,6 +1,7 @@
 import { ApiError, type ApiClient } from './api'
 import type { TextYourselfDatabase } from './db'
 import type { Message, Mutation, OutboxItem, Topic } from './types'
+import { toBlob } from '../lib/audio'
 
 const SYNC_PAGE_SIZE = 200
 
@@ -68,16 +69,38 @@ export class SyncEngine {
       case 'update_topic':
         return this.client.updateTopic(mutation.topic_id, mutation.changes)
       case 'create_message':
-        return this.client.createMessage(mutation.message.topic_id, {
-          id: mutation.message.id,
-          body: mutation.message.body,
-          reply_to_id: mutation.message.reply_to_id
-        })
+        return this.sendMessageCreate(mutation.message)
       case 'update_message':
         return this.client.updateMessage(mutation.message_id, mutation.body)
       case 'delete_message':
         return this.client.deleteMessage(mutation.message_id)
     }
+  }
+
+  /**
+   * Creates the message, then uploads its audio if it has any. Both requests
+   * are idempotent server-side, so the outbox item is only cleared once the
+   * audio has landed, and a retry after a partial failure simply repeats both.
+   */
+  private async sendMessageCreate(message: Message & { body: string }): Promise<Message> {
+    const confirmed = await this.client.createMessage(message.topic_id, {
+      id: message.id,
+      body: message.body,
+      reply_to_id: message.reply_to_id,
+      has_voice_note: message.has_voice_note
+    })
+    if (!message.has_voice_note) return confirmed
+    const recording = await this.database.voiceNotes.get(message.id)
+    if (!recording) {
+      // The audio is gone and cannot be recreated, so uploading is hopeless.
+      // Let the message stand as it is rather than retrying forever.
+      return confirmed
+    }
+    return this.client.uploadVoiceNote(
+      message.id,
+      toBlob(recording.audio, recording.mime_type),
+      recording.mime_type
+    )
   }
 
   private async markFailed(item: OutboxItem, message: string, blocked: boolean): Promise<void> {

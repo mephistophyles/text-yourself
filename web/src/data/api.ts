@@ -14,10 +14,10 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15_000): Promise<T> {
   const response = await fetch(path, {
     ...init,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: init?.body ? { 'Content-Type': 'application/json', ...init.headers } : init?.headers
   })
   if (!response.ok) {
@@ -41,7 +41,11 @@ export interface ApiClient {
   sync(after: number, limit: number): Promise<SyncPage>
   createTopic(topic: Pick<Topic, 'id' | 'title'>): Promise<Topic>
   updateTopic(topicId: string, changes: { title?: string; archived?: boolean }): Promise<Topic>
-  createMessage(topicId: string, message: Pick<Message, 'id' | 'body' | 'reply_to_id'>): Promise<Message>
+  createMessage(
+    topicId: string,
+    message: Pick<Message, 'id' | 'body' | 'reply_to_id' | 'has_voice_note'>
+  ): Promise<Message>
+  uploadVoiceNote(messageId: string, blob: Blob, mimeType: string): Promise<Message>
   updateMessage(messageId: string, body: string): Promise<Message>
   deleteMessage(messageId: string): Promise<Message>
   search(query: string, cursor?: string): Promise<SearchPage>
@@ -55,6 +59,17 @@ export const api: ApiClient = {
     request(`/api/topics/${topicId}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   createMessage: (topicId, message) =>
     request(`/api/topics/${topicId}/messages`, { method: 'POST', body: JSON.stringify(message) }),
+  uploadVoiceNote: (messageId, blob, mimeType) =>
+    request(
+      `/api/messages/${messageId}/voice-note`,
+      {
+        method: 'PUT',
+        body: blob,
+        headers: { 'Content-Type': mimeType }
+      },
+      // Audio is far larger than a text mutation, so it gets its own budget.
+      60_000
+    ),
   updateMessage: (messageId, body) =>
     request(`/api/messages/${messageId}`, { method: 'PATCH', body: JSON.stringify({ body }) }),
   deleteMessage: (messageId) => request(`/api/messages/${messageId}`, { method: 'DELETE' }),

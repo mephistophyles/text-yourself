@@ -25,7 +25,8 @@ describe('offline search', () => {
       updated_at: '2026-01-02T00:00:00Z',
       edited_at: null,
       deleted_at: '2026-01-02T00:00:00Z',
-      sync_version: 2
+      sync_version: 2,
+      has_voice_note: false
     }
 
     expect(buildLocalSearchHits([topic], [deleted], 'secret')).toEqual([])

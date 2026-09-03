@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { Me, Message, Topic } from '../data/types'
-import { formatTimestamp } from '../lib/format'
-import { BackIcon, CloseIcon, MoreIcon, ReplyIcon, SendIcon } from './Icons'
+import { formatDuration, formatTimestamp } from '../lib/format'
+import { BackIcon, CloseIcon, MicIcon, MoreIcon, ReplyIcon, SendIcon, StopIcon } from './Icons'
 import { MessageContent } from './MessageContent'
 import { ThreadMark } from './ThreadMark'
+import { useVoiceRecorder, type VoiceRecording } from '../hooks/useVoiceRecorder'
 
 interface Props {
   topic: Topic | null
@@ -14,7 +15,7 @@ interface Props {
   onBack(): void
   onRename(title: string): Promise<void>
   onArchive(): Promise<void>
-  onSend(body: string, replyToId: string | null): Promise<void>
+  onSend(body: string, replyToId: string | null, voiceNote: VoiceRecording | null): Promise<void>
   onEdit(message: Message, body: string): Promise<void>
   onDelete(message: Message): Promise<void>
 }
@@ -31,6 +32,8 @@ export function Conversation(props: Props) {
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const byId = useMemo(() => new Map(props.messages.map((message) => [message.id, message])), [props.messages])
   const canEdit = props.me?.role === 'editor'
+  const [recording, setRecording] = useState<VoiceRecording | null>(null)
+  const recorder = useVoiceRecorder()
 
   useEffect(() => {
     setReplyingTo(null)
@@ -40,6 +43,13 @@ export function Conversation(props: Props) {
     setTitle(props.topic?.title ?? '')
   }, [props.topic?.id, props.topic?.title])
 
+  const topicId = props.topic?.id
+  useEffect(() => {
+    // A half-finished recording belongs to the topic it was started in.
+    recorder.cancel()
+    setRecording(null)
+  }, [topicId, recorder.cancel])
+
   useEffect(() => {
     if (!props.jumpMessageId) return
     const element = document.getElementById(`message-${props.jumpMessageId}`)
@@ -48,12 +58,30 @@ export function Conversation(props: Props) {
     props.onJumpHandled()
   }, [props.jumpMessageId, props.messages, props.onJumpHandled])
 
+  async function toggleRecording() {
+    if (recorder.isRecording) {
+      setRecording(await recorder.stop())
+      return
+    }
+    setRecording(null)
+    await recorder.start()
+  }
+
+  function discardRecording() {
+    recorder.cancel()
+    setRecording(null)
+  }
+
   async function send(event: FormEvent) {
     event.preventDefault()
-    if (!body.trim()) return
-    await props.onSend(body, replyingTo?.id ?? null)
+    // A recording still in progress is finished first so the click that
+    // submits cannot silently drop it.
+    const pending = recorder.isRecording ? await recorder.stop() : recording
+    if (!body.trim() && !pending) return
+    await props.onSend(body, replyingTo?.id ?? null, pending)
     setBody('')
     setReplyingTo(null)
+    setRecording(null)
     requestAnimationFrame(() => endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }))
   }
 
@@ -103,7 +131,7 @@ export function Conversation(props: Props) {
                 <label className="sr-only" htmlFor={`edit-${message.id}`}>Edit message</label>
                 <textarea id={`edit-${message.id}`} autoFocus value={editBody} maxLength={10000} onChange={(event) => setEditBody(event.target.value)} />
                 <div><button className="text-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit">Save changes</button></div>
-              </form> : deleted ? <p className="deleted-message">Message deleted</p> : <MessageContent body={message.body} />}
+              </form> : deleted ? <p className="deleted-message">Message deleted</p> : <MessageContent body={message.body} messageId={message.id} hasVoiceNote={message.has_voice_note} />}
             </div>
             <div className="message-footer">
               {message.edited_at && !deleted && <span>Edited</span>}
@@ -120,11 +148,28 @@ export function Conversation(props: Props) {
 
       {canEdit ? <form className="composer" onSubmit={send}>
         {replyingTo && <div className="reply-banner"><ReplyIcon /><span>Replying to <strong>{replyingTo.author_display_name}</strong>: {replyingTo.body?.slice(0, 90) ?? 'Deleted message'}</span><button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><CloseIcon /></button></div>}
+        {recorder.isRecording && <div className="recording-banner" role="status">
+          <span className="recording-dot" aria-hidden="true" />
+          <span>Recording {formatDuration(recorder.elapsedMs)}</span>
+          <button type="button" onClick={discardRecording}>Discard</button>
+        </div>}
+        {recording && !recorder.isRecording && <div className="recording-banner recording-banner--ready">
+          <MicIcon />
+          <span>Voice note ready, {formatDuration(recording.durationMs)}</span>
+          <button type="button" onClick={discardRecording}>Discard</button>
+        </div>}
+        {recorder.error && <p className="recording-error" role="alert">{recorder.error}</p>}
         <label className="sr-only" htmlFor="message-body">Write a message</label>
         <textarea ref={composerRef} id="message-body" rows={1} maxLength={10000} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Leave a note…" onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
         }} />
-        <button className="send-button" type="submit" disabled={!body.trim()} aria-label="Send message"><SendIcon /></button>
+        {recorder.supported && <button
+          className={`icon-button record-button ${recorder.isRecording ? 'record-button--live' : ''}`}
+          type="button"
+          onClick={() => void toggleRecording()}
+          aria-label={recorder.isRecording ? 'Stop recording' : 'Record a voice note'}
+        >{recorder.isRecording ? <StopIcon /> : <MicIcon />}</button>}
+        <button className="send-button" type="submit" disabled={!body.trim() && !recording && !recorder.isRecording} aria-label="Send message"><SendIcon /></button>
       </form> : <div className="viewer-note">You have view-only access.</div>}
     </main>
   )

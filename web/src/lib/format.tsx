@@ -70,3 +70,9 @@ export function threadColor(id: string): string {
   for (const character of id) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0
   return colors[Math.abs(hash) % colors.length]!
 }
+
+export function formatDuration(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  return `${minutes}:${String(totalSeconds % 60).padStart(2, '0')}`
+}

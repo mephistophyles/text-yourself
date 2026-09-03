@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import re
 
@@ -11,14 +12,38 @@ def test_every_forward_migration_has_a_down_migration():
     assert forwards == downs
 
 
+def _forward_migrations() -> list[Path]:
+    return sorted(
+        path for path in Path("migrations").glob("*.sql") if not path.name.endswith(".down.sql")
+    )
+
+
 def test_all_application_tables_enable_and_force_rls_with_policies():
-    sql = Path("migrations/001_initial.sql").read_text()
-    tables = re.findall(r"CREATE TABLE (\w+)", sql)
-    assert tables == ["topics", "messages"]
-    for table in tables:
-        assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql
-        assert f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in sql
-        assert re.search(rf"CREATE POLICY \w+ ON {table}", sql)
+    """Every table any migration creates must be covered, not just the first one."""
+    created = []
+    for path in _forward_migrations():
+        sql = path.read_text()
+        for table in re.findall(r"CREATE TABLE (\w+)", sql):
+            created.append(table)
+            assert f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY" in sql
+            assert f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in sql
+            assert re.search(rf"CREATE POLICY \w+ ON {table}", sql)
+    assert created == ["topics", "messages", "voice_notes"]
+
+
+def test_applied_migrations_are_never_edited_in_place():
+    """A migration is recorded by filename, so an edit never reaches a live database.
+
+    This pins the checksum of every migration that has shipped. Changing one is
+    a deliberate act that has to update this list and reason about deployed
+    databases; the default outcome is a failing test, not a silent no-op.
+    """
+    shipped = {
+        "001_initial.sql": "c661293c9212eb56da268fd2d5d50f7f",
+    }
+    for name, digest in shipped.items():
+        actual = hashlib.md5(Path("migrations", name).read_bytes()).hexdigest()
+        assert actual == digest, f"{name} was edited after being applied; add a new migration"
 
 
 def test_runtime_paths_are_explicit_environment_defaults():

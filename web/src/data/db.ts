@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { Message, OutboxItem, Topic } from './types'
+import type { LocalVoiceNote, Message, OutboxItem, Topic } from './types'
 
 export interface MetaValue {
   key: string
@@ -11,6 +11,7 @@ export class TextYourselfDatabase extends Dexie {
   messages!: EntityTable<Message, 'id'>
   outbox!: EntityTable<OutboxItem, 'sequence'>
   meta!: EntityTable<MetaValue, 'key'>
+  voiceNotes!: EntityTable<LocalVoiceNote, 'message_id'>
 
   constructor(name = 'text-yourself') {
     super(name)
@@ -20,6 +21,9 @@ export class TextYourselfDatabase extends Dexie {
       outbox: '++sequence, created_at',
       meta: 'key'
     })
+    // Audio lives in its own table so a sync pull, which replaces whole
+    // message rows, cannot wipe a recording that has not been uploaded yet.
+    this.version(2).stores({ voiceNotes: 'message_id' })
   }
 }
 

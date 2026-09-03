@@ -1,10 +1,18 @@
 import { extractSafeLinks, linkify } from '../lib/format'
+import { VoiceNote } from './VoiceNote'
 
-export function MessageContent({ body }: { body: string | null }) {
+interface Props {
+  body: string | null
+  messageId: string
+  hasVoiceNote: boolean
+}
+
+export function MessageContent({ body, messageId, hasVoiceNote }: Props) {
   const links = extractSafeLinks(body)
   return (
     <>
-      <p className="message-body">{linkify(body)}</p>
+      {body && <p className="message-body">{linkify(body)}</p>}
+      {hasVoiceNote && <VoiceNote messageId={messageId} />}
       {links.length > 0 && <div className="link-list">
         {links.map((link) => (
           <a key={link.url} className="link-card" href={link.url} target="_blank" rel="noopener noreferrer">
