@@ -2,8 +2,8 @@
 
 Text Yourself is a private, shared household notebook presented as topic-based
 message threads. Two household members can add messages and links, quote earlier
-messages, search the shared history, and tell who wrote each entry without turning
-the app into another chat service.
+messages, record voice notes, search the shared history, and tell who wrote each
+entry without turning the app into another chat service.
 
 The installable web app keeps a complete local projection in IndexedDB for offline
 reading and search. Offline edits are queued and replayed when connectivity returns.
@@ -50,6 +50,7 @@ Configuration comes only from the environment. Do not create `.env`,
 | `/home/text-yourself/AUTH_MODE` | `String` | `none` initially; `proxy` only when trusted forward-auth is live. |
 | `/home/text-yourself/PUBLIC_BASE_URL` | `String` | Canonical externally reachable HTTPS origin, with no trailing slash. |
 | `/home/text-yourself/USER_DISPLAY_NAMES` | `SecureString` | Proxy-mode JSON object mapping allowed email identities to display names. |
+| `/home/text-yourself/VOICE_NOTE_MAX_BYTES` | `String` | Optional. Largest accepted voice note, in bytes. Defaults to `2000000`; the column accepts at most `8000000`. |
 
 For example, the shape of `USER_DISPLAY_NAMES` is
 `{"user@example.com":"Household member"}`; production values belong only in SSM.
@@ -133,10 +134,33 @@ After forward-auth and the second household member are ready, populate the displ
 name map, change `AUTH_MODE` to `proxy`, and reload the app environment as described
 in the operations guide.
 
+## Voice notes
+
+A message can carry one voice note, recorded in the browser and stored as bytes in
+the `voice_notes` table alongside the message. Audio is deliberately kept off the
+sync channel: synchronization carries only a `has_voice_note` flag, and the recording
+itself is fetched from `GET /api/messages/{id}/voice-note` when someone plays it.
+Inlining audio in sync pages would make every pull proportional to the audio ever
+recorded.
+
+Recordings are uploaded with `PUT /api/messages/{id}/voice-note`. Both that request
+and the message creation before it are idempotent, so an offline client can replay
+the pair safely. The uploading device keeps its own copy in IndexedDB, which is what
+it plays back and what lets a recording survive being made offline.
+
+Browsers disagree on recordable containers, so the client asks `MediaRecorder` which
+of `audio/webm`, `audio/ogg`, and `audio/mp4` it can produce, and the server accepts
+only those three. A browser that can record none of them hides the control rather
+than failing at send time.
+
+A message may have an empty body when it carries a voice note; that is the only case
+where an empty body is accepted.
+
 ## Data and backups
 
 PostgreSQL is the only durable system of record; IndexedDB is a replaceable client
 projection. Soft-deleted message bodies remain in PostgreSQL for recovery and sync.
+A soft-deleted message stops serving its audio but the bytes are retained with it.
 This repository does not schedule or store backups. The platform operator must
 include the app database in encrypted server-level backups, keep them outside the
 container, and periodically prove restoration into an isolated database. Take an

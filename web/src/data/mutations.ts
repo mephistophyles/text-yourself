@@ -1,5 +1,7 @@
 import type { TextYourselfDatabase } from './db'
 import type { Me, Message, Topic } from './types'
+import type { VoiceRecording } from '../hooks/useVoiceRecorder'
+import { blobToArrayBuffer } from '../lib/audio'
 
 const now = () => new Date().toISOString()
 
@@ -49,9 +51,10 @@ export async function queueMessageCreate(
   body: string,
   replyToId: string | null,
   me: Me,
-  voiceNoteBase64: string | null = null
+  voiceNote: VoiceRecording | null = null
 ): Promise<Message> {
   const timestamp = now()
+  const audio = voiceNote ? await blobToArrayBuffer(voiceNote.blob) : null
   const message: Message & { body: string } = {
     id: crypto.randomUUID(),
     topic_id: topicId,
@@ -64,13 +67,28 @@ export async function queueMessageCreate(
     edited_at: null,
     deleted_at: null,
     sync_version: 0,
-    _status: 'pending',
-    ...(voiceNoteBase64 ? { voice_note_base64: voiceNoteBase64 } : {})
+    has_voice_note: Boolean(voiceNote),
+    _status: 'pending'
   }
-  await database.transaction('rw', database.messages, database.outbox, async () => {
-    await database.messages.add(message)
-    await database.outbox.add({ mutation: { type: 'create_message', message }, created_at: timestamp })
-  })
+  await database.transaction(
+    'rw',
+    database.messages,
+    database.outbox,
+    database.voiceNotes,
+    async () => {
+      await database.messages.add(message)
+      // The recording is stored before the outbox entry, so a queued upload
+      // can never reference audio that is not on disk yet.
+      if (voiceNote && audio) {
+        await database.voiceNotes.put({
+          message_id: message.id,
+          audio,
+          mime_type: voiceNote.mimeType
+        })
+      }
+      await database.outbox.add({ mutation: { type: 'create_message', message }, created_at: timestamp })
+    }
+  )
   return message
 }
 

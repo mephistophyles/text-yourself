@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 
+from .errors import ApiError
 from .identity import Identity
 from .models import (
     Limit,
@@ -17,7 +18,6 @@ from .models import (
     Topic,
     TopicCreate,
     TopicPatch,
-    VoiceNoteBase64,
 )
 from .service import MessageService
 
@@ -97,7 +97,7 @@ async def create_message(
     app_service: Annotated[MessageService, Depends(service)],
 ) -> Message:
     return await app_service.create_message(
-        current, topic_id, payload.id, payload.body, payload.reply_to_id
+        current, topic_id, payload.id, payload.body, payload.reply_to_id, payload.has_voice_note
     )
 
 
@@ -109,6 +109,34 @@ async def edit_message(
     app_service: Annotated[MessageService, Depends(service)],
 ) -> Message:
     return await app_service.edit_message(current, message_id, payload.body)
+
+
+@router.put("/messages/{message_id}/voice-note", response_model=Message)
+async def attach_voice_note(
+    message_id: UUID,
+    request: Request,
+    current: Annotated[Identity, Depends(identity)],
+    app_service: Annotated[MessageService, Depends(service)],
+) -> Message:
+    mime_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    audio = await _read_capped_body(request, app_service.voice_note_max_bytes)
+    return await app_service.attach_voice_note(current, message_id, mime_type, audio)
+
+
+@router.get("/messages/{message_id}/voice-note")
+async def get_voice_note(
+    message_id: UUID,
+    current: Annotated[Identity, Depends(identity)],
+    app_service: Annotated[MessageService, Depends(service)],
+) -> Response:
+    mime_type, audio = await app_service.voice_note(current, message_id)
+    return Response(
+        content=audio,
+        media_type=mime_type,
+        # Audio is written once and never edited, so it is safe to cache hard.
+        # Private: it is household content behind the proxy, not public.
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 @router.delete("/messages/{message_id}", response_model=Message)
@@ -129,3 +157,22 @@ async def search(
     limit: Limit = 100,
 ) -> dict[str, object]:
     return await app_service.search(current, q, cursor, limit)
+
+
+async def _read_capped_body(request: Request, limit: int) -> bytes:
+    """Read the request body, refusing anything over the limit.
+
+    Content-Length is only a hint, so the stream is capped as it is consumed
+    rather than trusting the header.
+    """
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > limit:
+        raise ApiError(413, "voice_note_too_large", f"A voice note cannot exceed {limit} bytes")
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > limit:
+            raise ApiError(413, "voice_note_too_large", f"A voice note cannot exceed {limit} bytes")
+        chunks.append(chunk)
+    return b"".join(chunks)

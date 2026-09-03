@@ -10,6 +10,7 @@ class MemoryRepository:
     def __init__(self) -> None:
         self.topics: dict[UUID, dict] = {}
         self.messages: dict[UUID, dict] = {}
+        self.voice_notes: dict[UUID, dict] = {}
         self.version = 0
         self.clock = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -54,7 +55,9 @@ class MemoryRepository:
         rows.sort(key=lambda row: (row["updated_at"], row["id"]), reverse=True)
         return [dict(row) for row in rows[:limit]], None, len(rows) > limit
 
-    async def create_message(self, identity, message_id, topic_id, body, reply_to_id, voice_note_base64: str | None = None):
+    async def create_message(
+        self, identity, message_id, topic_id, body, reply_to_id, has_voice_note=False
+    ):
         if message_id in self.messages:
             return self._safe_message(self.messages[message_id]), False
         if topic_id not in self.topics:
@@ -64,8 +67,7 @@ class MemoryRepository:
             "id": message_id, "topic_id": topic_id, "author_id": identity.user_id,
             "body": body, "reply_to_id": reply_to_id, "created_at": timestamp,
             "updated_at": timestamp, "edited_at": None, "deleted_at": None,
-            "sync_version": version,
-            "voice_note_base64": voice_note_base64,
+            "sync_version": version, "has_voice_note": has_voice_note,
         }
         self.messages[message_id] = row
         return dict(row), True
@@ -80,6 +82,25 @@ class MemoryRepository:
     async def message_state(self, identity, message_id):
         row = self.messages.get(message_id)
         return dict(row) if row else None
+
+    async def attach_voice_note(self, identity, message_id, mime_type, audio):
+        row = self.messages.get(message_id)
+        if not row or row["author_id"] != identity.user_id or row["deleted_at"]:
+            return None, False
+        created = message_id not in self.voice_notes
+        if created:
+            self.voice_notes[message_id] = {
+                "mime_type": mime_type, "byte_size": len(audio), "audio": audio,
+            }
+            timestamp, version = self._tick()
+            row.update(has_voice_note=True, updated_at=timestamp, sync_version=version)
+        return self._safe_message(row), created
+
+    async def voice_note(self, identity, message_id):
+        row = self.messages.get(message_id)
+        if not row or row["deleted_at"]:
+            return None
+        return self.voice_notes.get(message_id)
 
     async def edit_message(self, identity, message_id, body):
         row = self.messages.get(message_id)

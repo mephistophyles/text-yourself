@@ -32,9 +32,16 @@ export interface Message {
   edited_at: string | null
   deleted_at: string | null
   sync_version: number
-  voice_note_base64: string | null
+  has_voice_note: boolean
   _status?: LocalStatus
   _error?: string
+}
+
+/** A recording held locally until it is uploaded, and kept for offline playback. */
+export interface LocalVoiceNote {
+  message_id: string
+  audio: ArrayBuffer
+  mime_type: string
 }
 
 export type SyncChange =

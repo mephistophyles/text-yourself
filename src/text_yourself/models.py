@@ -4,13 +4,15 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
 TopicTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 MessageBody = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000)]
+# A voice note can stand on its own, so a message carrying one may have no text.
+OptionalMessageBody = Annotated[str, StringConstraints(strip_whitespace=True, max_length=20_000)]
 
-VoiceNoteBase64 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000_000)]
+VOICE_NOTE_MIME_TYPES = ("audio/webm", "audio/ogg", "audio/mp4")
 
 
 class MeResponse(BaseModel):
@@ -42,13 +44,20 @@ class Topic(BaseModel):
 
 class MessageCreate(BaseModel):
     id: UUID
-    body: MessageBody
+    body: OptionalMessageBody
     reply_to_id: UUID | None = None
-    voice_note_base64: VoiceNoteBase64 | None = None
+    has_voice_note: bool = False
+
+    @model_validator(mode="after")
+    def _body_or_voice_note(self) -> "MessageCreate":
+        if not self.body and not self.has_voice_note:
+            raise ValueError("A message needs a body or a voice note")
+        return self
 
 
 class MessagePatch(BaseModel):
-    body: MessageBody
+    # Emptiness is checked against the message's voice note in the service.
+    body: OptionalMessageBody
 
 
 class Message(BaseModel):
@@ -63,7 +72,7 @@ class Message(BaseModel):
     edited_at: datetime | None
     deleted_at: datetime | None
     sync_version: int
-    voice_note_base64: str | None = None
+    has_voice_note: bool = False
 
 
 class SyncChange(BaseModel):

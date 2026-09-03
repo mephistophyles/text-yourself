@@ -1,103 +1,159 @@
-import { useState, useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-export interface VoiceRecorderResult {
-  audioBase64: string | null
-  blob: Blob | null
-  isRecording: boolean
-  start: () => Promise<void>
-  stop: () => Promise<Blob | null>
-  cancel: () => void
+export interface VoiceRecording {
+  blob: Blob
+  mimeType: string
+  durationMs: number
 }
 
-export function useVoiceRecorder(): VoiceRecorderResult {
+export interface VoiceRecorder {
+  isRecording: boolean
+  elapsedMs: number
+  error: string | null
+  supported: boolean
+  start(): Promise<void>
+  stop(): Promise<VoiceRecording | null>
+  cancel(): void
+}
+
+// The server stores these three container types. Browsers disagree on what
+// they can record — Chrome and Firefox produce webm/ogg, Safari produces mp4 —
+// so ask before choosing rather than assuming webm.
+const CANDIDATE_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/ogg;codecs=opus',
+  'audio/ogg',
+  'audio/mp4'
+]
+
+const ACCEPTED_CONTAINERS = ['audio/webm', 'audio/ogg', 'audio/mp4']
+
+export function baseMimeType(mimeType: string): string {
+  return (mimeType.split(';')[0] ?? '').trim().toLowerCase()
+}
+
+function isRecordingSupported(): boolean {
+  return (
+    typeof MediaRecorder !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    Boolean(navigator.mediaDevices?.getUserMedia)
+  )
+}
+
+function preferredMimeType(): string | null {
+  const supported = CANDIDATE_TYPES.find((type) => MediaRecorder.isTypeSupported?.(type))
+  return supported ?? null
+}
+
+export function useVoiceRecorder(): VoiceRecorder {
   const [isRecording, setIsRecording] = useState(false)
-  const [blob, setBlob] = useState<Blob | null>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [supported] = useState(isRecordingSupported)
+
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const startedAtRef = useRef(0)
+  const resolveRef = useRef<((recording: VoiceRecording | null) => void) | null>(null)
+  const discardRef = useRef(false)
+
+  // Releasing the tracks is what turns off the browser's recording indicator.
+  const releaseStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    recorderRef.current = null
+  }, [])
+
+  useEffect(() => releaseStream, [releaseStream])
+
+  useEffect(() => {
+    if (!isRecording) return
+    const timer = window.setInterval(() => setElapsedMs(Date.now() - startedAtRef.current), 200)
+    return () => window.clearInterval(timer)
+  }, [isRecording])
 
   const start = useCallback(async () => {
+    if (recorderRef.current) return
+    setError(null)
+    if (!isRecordingSupported()) {
+      setError('This browser cannot record audio.')
+      return
+    }
+    let stream: MediaStream
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const chunks: Blob[] = []
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setError('Microphone access was declined.')
+      return
+    }
+    const mimeType = preferredMimeType()
+    let recorder: MediaRecorder
+    try {
+      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    } catch {
+      stream.getTracks().forEach((track) => track.stop())
+      setError('This browser cannot record a supported audio format.')
+      return
+    }
+    if (!ACCEPTED_CONTAINERS.includes(baseMimeType(recorder.mimeType || mimeType || ''))) {
+      stream.getTracks().forEach((track) => track.stop())
+      setError('This browser cannot record a supported audio format.')
+      return
+    }
 
-      mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+    chunksRef.current = []
+    discardRef.current = false
+    recorderRef.current = recorder
+    streamRef.current = stream
 
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          chunks.push(event.data)
-        }
-      }
-
-      mediaRecorderRef.current.onstop = () => {
-        const finalBlob = new Blob(chunks, { type: 'audio/webm' })
-        setBlob(finalBlob)
-        // Create base64 string
-        const reader = new FileReader()
-        reader.readAsDataURL(finalBlob)
-        reader.onload = () => {
-          setIsRecording(false)
-        }
-        reader.onerror = () => {
-          setIsRecording(false)
-        }
-      }
-
-      mediaRecorderRef.current.start()
-      setIsRecording(true)
-      audioChunksRef.current = []
-    } catch (err) {
-      console.error('Voice recorder error:', err)
+    recorder.ondataavailable = (event) => {
+      if (event.data?.size) chunksRef.current.push(event.data)
+    }
+    recorder.onerror = () => {
+      setError('Recording stopped unexpectedly.')
+    }
+    recorder.onstop = () => {
+      const type = baseMimeType(recorder.mimeType || mimeType || 'audio/webm')
+      const blob = new Blob(chunksRef.current, { type })
+      const durationMs = Date.now() - startedAtRef.current
+      chunksRef.current = []
+      releaseStream()
       setIsRecording(false)
+      const resolve = resolveRef.current
+      resolveRef.current = null
+      // A cancelled or silent recording resolves to nothing rather than
+      // handing the caller an unplayable zero-byte clip.
+      resolve?.(discardRef.current || blob.size === 0 ? null : { blob, mimeType: type, durationMs })
     }
-  }, [])
 
-  const stop = useCallback(async (): Promise<Blob | null> => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop()
-      // Wait for ondataavailable and onstop to fire
-      return new Promise<Blob | null>((resolve) => {
-        const checkDone = setInterval(() => {
-          if (blob) {
-            clearInterval(checkDone)
-            resolve(blob)
-          }
-        }, 100)
-        setTimeout(() => {
-          clearInterval(checkDone)
-          resolve(null)
-        }, 5000)
-      })
-    }
-    return Promise.resolve(null)
-  }, [isRecording, blob])
+    startedAtRef.current = Date.now()
+    setElapsedMs(0)
+    recorder.start()
+    setIsRecording(true)
+  }, [releaseStream])
+
+  const stop = useCallback(async (): Promise<VoiceRecording | null> => {
+    const recorder = recorderRef.current
+    if (!recorder || recorder.state === 'inactive') return null
+    // onstop is the only place the final blob exists, so resolve from there.
+    return new Promise<VoiceRecording | null>((resolve) => {
+      resolveRef.current = resolve
+      recorder.stop()
+    })
+  }, [])
 
   const cancel = useCallback(() => {
+    discardRef.current = true
+    const recorder = recorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop()
+      return
+    }
+    releaseStream()
     setIsRecording(false)
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop()
-      setBlob(null)
-    }
-  }, [])
+  }, [releaseStream])
 
-  return {
-    audioBase64: blob ? await blobToBase64(blob) : null,
-    blob,
-    isRecording,
-    start,
-    stop,
-    cancel,
-  }
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(blob)
-    reader.onload = () => {
-      const base64 = reader.result?.toString().split(',')[1]
-      if (base64) resolve(base64)
-      else reject(new Error('No base64 data'))
-    }
-    reader.onerror = reject
-  })
+  return { isRecording, elapsedMs, error, supported, start, stop, cancel }
 }

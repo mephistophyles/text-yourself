@@ -11,3 +11,5 @@ export const ReplyIcon = (props: IconProps) => <svg {...base} {...props}><path d
 export const MoreIcon = (props: IconProps) => <svg {...base} {...props}><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></svg>
 export const CloseIcon = (props: IconProps) => <svg {...base} {...props}><path d="m6 6 12 12M18 6 6 18"/></svg>
 export const SendIcon = (props: IconProps) => <svg {...base} {...props}><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+export const MicIcon = (props: IconProps) => <svg {...base} {...props}><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>
+export const StopIcon = (props: IconProps) => <svg {...base} {...props}><rect x="6" y="6" width="12" height="12" rx="2"/></svg>

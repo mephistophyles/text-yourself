@@ -16,20 +16,29 @@ class MessageRepository(RepositoryBase):
         topic_id: UUID,
         body: str,
         reply_to_id: UUID | None,
-        voice_note_base64: str | None = None,
+        has_voice_note: bool = False,
     ) -> tuple[Record | None, bool]:
         async with self._database.transaction(identity) as connection:
             cursor = await connection.execute(
                 """
-                INSERT INTO messages (id, household_id, topic_id, author_id, body, voice_note_base64, reply_to_id)
+                INSERT INTO messages
+                    (id, household_id, topic_id, author_id, body, reply_to_id, has_voice_note)
                 SELECT %s, %s, id, %s, %s, %s, %s FROM topics WHERE id = %s
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id, topic_id, author_id,
                           CASE WHEN deleted_at IS NULL THEN body ELSE NULL END AS body,
-                          voice_note_base64,
-                          reply_to_id, created_at, updated_at, edited_at, deleted_at, sync_version
+                          reply_to_id, created_at, updated_at, edited_at, deleted_at, sync_version,
+                          has_voice_note
                 """,
-                (message_id, self._database.household_id, identity.user_id, body, voice_note_base64, reply_to_id, topic_id),
+                (
+                    message_id,
+                    self._database.household_id,
+                    identity.user_id,
+                    body,
+                    reply_to_id,
+                    has_voice_note,
+                    topic_id,
+                ),
             )
             row = await cursor.fetchone()
             if row:
@@ -65,30 +74,22 @@ class MessageRepository(RepositoryBase):
     async def message_state(self, identity: Identity, message_id: UUID) -> Record | None:
         async with self._database.transaction(identity) as connection:
             cursor = await connection.execute(
-                "SELECT id, author_id, topic_id, reply_to_id, deleted_at FROM messages WHERE id = %s",
+                """SELECT id, author_id, topic_id, reply_to_id, deleted_at, has_voice_note
+                     FROM messages WHERE id = %s""",
                 (message_id,),
             )
             return await cursor.fetchone()
-    async def edit_message(self, identity: Identity, message_id: UUID, body: str, voice_note_base64: str | None = None) -> Record | None:
+
+    async def edit_message(self, identity: Identity, message_id: UUID, body: str) -> Record | None:
         async with self._database.transaction(identity) as connection:
-            if voice_note_base64 is not None:
-                cursor = await connection.execute(
-                    f"""
-                    UPDATE messages SET body = %s, voice_note_base64 = %s, edited_at = now()
-                     WHERE id = %s AND author_id = %s AND deleted_at IS NULL
-                    RETURNING {message_columns()}
-                    """,
-                    (body, voice_note_base64, message_id, identity.user_id),
-                )
-            else:
-                cursor = await connection.execute(
-                    f"""
-                    UPDATE messages SET body = %s, edited_at = now()
-                     WHERE id = %s AND author_id = %s AND deleted_at IS NULL
-                    RETURNING {message_columns()}
-                    """,
-                    (body, message_id, identity.user_id),
-                )
+            cursor = await connection.execute(
+                f"""
+                UPDATE messages SET body = %s, edited_at = now()
+                 WHERE id = %s AND author_id = %s AND deleted_at IS NULL
+                RETURNING {message_columns()}
+                """,
+                (body, message_id, identity.user_id),
+            )
             return await cursor.fetchone()
 
     async def delete_message(self, identity: Identity, message_id: UUID) -> Record | None:
