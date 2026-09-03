@@ -32,7 +32,6 @@ export interface Message {
   edited_at: string | null
   deleted_at: string | null
   sync_version: number
-  voice_note_base64: string | null
   _status?: LocalStatus
   _error?: string
 }

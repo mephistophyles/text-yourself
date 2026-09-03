@@ -48,8 +48,7 @@ export async function queueMessageCreate(
   topicId: string,
   body: string,
   replyToId: string | null,
-  me: Me,
-  voiceNoteBase64: string | null = null
+  me: Me
 ): Promise<Message> {
   const timestamp = now()
   const message: Message & { body: string } = {
@@ -64,8 +63,7 @@ export async function queueMessageCreate(
     edited_at: null,
     deleted_at: null,
     sync_version: 0,
-    _status: 'pending',
-    ...(voiceNoteBase64 ? { voice_note_base64: voiceNoteBase64 } : {})
+    _status: 'pending'
   }
   await database.transaction('rw', database.messages, database.outbox, async () => {
     await database.messages.add(message)

@@ -17,7 +17,6 @@ CREATE TABLE messages (
     topic_id UUID NOT NULL REFERENCES topics(id),
     author_id TEXT NOT NULL,
     body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 20000),
-    voice_note_base64 TEXT,
     reply_to_id UUID REFERENCES messages(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
