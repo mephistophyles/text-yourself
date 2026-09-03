@@ -137,9 +137,9 @@ export default function App() {
           setMobilePane('topics')
           await afterMutation('Topic archived.')
         }}
-        onSend={async (body, replyToId) => {
+        onSend={async (body, replyToId, voiceNoteBase64) => {
           if (!activeTopic || !me) return
-          await queueMessageCreate(db, activeTopic.id, body, replyToId, me)
+          await queueMessageCreate(db, activeTopic.id, body, replyToId, me, voiceNoteBase64)
           await afterMutation('Message saved locally.')
         }}
         onEdit={async (message, body) => {

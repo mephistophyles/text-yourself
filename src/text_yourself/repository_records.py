@@ -7,6 +7,7 @@ from .repository_base import Record
 def message_columns() -> str:
     return """id, topic_id, author_id,
               CASE WHEN deleted_at IS NULL THEN body ELSE NULL END AS body,
+              voice_note_base64,
               reply_to_id, created_at, updated_at, edited_at, deleted_at, sync_version"""
 
 

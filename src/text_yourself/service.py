@@ -60,6 +60,7 @@ class MessageService:
         message_id: UUID,
         body: str,
         reply_to_id: UUID | None,
+        voice_note_base64: str | None = None,
     ) -> Message:
         require_editor(identity)
         if reply_to_id:
@@ -67,7 +68,7 @@ class MessageService:
             if not reply or reply["topic_id"] != topic_id:
                 raise ApiError(422, "invalid_reply", "Reply target is not in this topic")
         row, _created = await self._repository.create_message(
-            identity, message_id, topic_id, body, reply_to_id
+            identity, message_id, topic_id, body, reply_to_id, voice_note_base64
         )
         if not row:
             raise ApiError(404, "topic_not_found", "Topic not found")
@@ -76,6 +77,7 @@ class MessageService:
             or row["topic_id"] != topic_id
             or row["reply_to_id"] != reply_to_id
             or row["body"] != body
+            or row["voice_note_base64"] != voice_note_base64
         ):
             raise ApiError(409, "id_conflict", "That message ID is already in use")
         return self._message(row)

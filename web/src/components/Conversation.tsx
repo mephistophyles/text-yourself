@@ -4,6 +4,7 @@ import { formatTimestamp } from '../lib/format'
 import { BackIcon, CloseIcon, MoreIcon, ReplyIcon, SendIcon } from './Icons'
 import { MessageContent } from './MessageContent'
 import { ThreadMark } from './ThreadMark'
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder'
 
 interface Props {
   topic: Topic | null
@@ -14,9 +15,14 @@ interface Props {
   onBack(): void
   onRename(title: string): Promise<void>
   onArchive(): Promise<void>
-  onSend(body: string, replyToId: string | null): Promise<void>
+  onSend(body: string, replyToId: string | null, voiceNoteBase64: string | null): Promise<void>
   onEdit(message: Message, body: string): Promise<void>
   onDelete(message: Message): Promise<void>
+}
+
+interface VoiceNoteState {
+  isRecording: boolean
+  recordedBase64: string | null
 }
 
 export function Conversation(props: Props) {
@@ -31,30 +37,30 @@ export function Conversation(props: Props) {
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const byId = useMemo(() => new Map(props.messages.map((message) => [message.id, message])), [props.messages])
   const canEdit = props.me?.role === 'editor'
+  const [voiceNoteState, setVoiceNoteState] = useState<VoiceNoteState>({ isRecording: false, recordedBase64: null })
+  const [voiceRecorder, setVoiceRecorder] = useVoiceRecorder()
 
-  useEffect(() => {
-    setReplyingTo(null)
-    setEditing(null)
-    setMenuOpen(false)
-    setRenaming(false)
-    setTitle(props.topic?.title ?? '')
-  }, [props.topic?.id, props.topic?.title])
+  const handleRecord = async () => {
+    if (voiceNoteState.isRecording) {
+      const base64 = await voiceRecorder.stop()
+      setVoiceNoteState({ isRecording: false, recordedBase64: base64 })
+    } else {
+      await voiceRecorder.start()
+      setVoiceNoteState({ isRecording: true, recordedBase64: null })
+    }
+  }
 
-  useEffect(() => {
-    if (!props.jumpMessageId) return
-    const element = document.getElementById(`message-${props.jumpMessageId}`)
-    element?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    element?.focus({ preventScroll: true })
-    props.onJumpHandled()
-  }, [props.jumpMessageId, props.messages, props.onJumpHandled])
+  const handleSendWithVoiceNote = async (body: string, replyToId: string | null, voiceNoteBase64: string | null) => {
+    await props.onSend(body, replyToId, voiceNoteBase64)
+    setBody('')
+    setVoiceNoteState({ isRecording: false, recordedBase64: null })
+    requestAnimationFrame(() => endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }))
+  }
 
   async function send(event: FormEvent) {
     event.preventDefault()
-    if (!body.trim()) return
-    await props.onSend(body, replyingTo?.id ?? null)
-    setBody('')
-    setReplyingTo(null)
-    requestAnimationFrame(() => endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }))
+    if (!body.trim() && !voiceNoteState.recordedBase64) return
+    await handleSendWithVoiceNote(body, replyingTo?.id ?? null, voiceNoteState.recordedBase64)
   }
 
   if (!props.topic) {
@@ -103,14 +109,17 @@ export function Conversation(props: Props) {
                 <label className="sr-only" htmlFor={`edit-${message.id}`}>Edit message</label>
                 <textarea id={`edit-${message.id}`} autoFocus value={editBody} maxLength={10000} onChange={(event) => setEditBody(event.target.value)} />
                 <div><button className="text-button" type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary-button" type="submit">Save changes</button></div>
-              </form> : deleted ? <p className="deleted-message">Message deleted</p> : <MessageContent body={message.body} />}
+              </form> : deleted ? <p className="deleted-message">Message deleted</p> : <MessageContent body={message.body} voice_note_base64={message.voice_note_base64} />}
             </div>
             <div className="message-footer">
               {message.edited_at && !deleted && <span>Edited</span>}
-              {message._status && <span className={`delivery-state delivery-state--${message._status}`}>{message._status === 'pending' ? 'Waiting to sync' : `Couldn’t sync${message._error ? `: ${message._error}` : ''}`}</span>}
+              {message._status && <span className={`delivery-state delivery-state--${message._status}`}>{message._status === 'pending' ? 'Waiting to sync' : `Couldn't sync${message._error ? `: ${message._error}` : ''}`}</span>
               {canEdit && !deleted && <span className="message-actions">
                 <button onClick={() => { setReplyingTo(message); composerRef.current?.focus() }}><ReplyIcon /> Reply</button>
                 {own && <><button onClick={() => { setEditing(message); setEditBody(message.body ?? '') }}>Edit</button><button onClick={() => { if (window.confirm('Delete this message? It will remain recoverable in the database.')) void props.onDelete(message) }}>Delete</button></>}
+                {canEdit && (
+                  <button onClick={handleRecord} className="voice-note-button" aria-label={voiceNoteState.isRecording ? 'Stop recording' : 'Record a voice note'}><svg viewBox="0 0 24 24" width={16} height={16} fill={voiceNoteState.isRecording ? 'red' : 'currentColor'}/><path d="M3 3v2h2l8.59 8.59L17 18l2-2 5.41 5.41L20 7l-5-5-1.41 1.41L7 15l-5-1z"/></svg>{voiceNoteState.isRecording ? ' Recording' : ' Voice Note'}</button>
+                )}
               </span>}
             </div>
           </article>
@@ -124,7 +133,12 @@ export function Conversation(props: Props) {
         <textarea ref={composerRef} id="message-body" rows={1} maxLength={10000} value={body} onChange={(event) => setBody(event.target.value)} placeholder="Leave a note…" onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
         }} />
-        <button className="send-button" type="submit" disabled={!body.trim()} aria-label="Send message"><SendIcon /></button>
+        <div className="composer-actions">
+          <button className="send-button" type="submit" disabled={!body.trim() && !voiceNoteState.recordedBase64} aria-label="Send message"><SendIcon /></button>
+          {canEdit && (
+            <button onClick={handleRecord} className="voice-note-record-button" aria-label={voiceNoteState.isRecording ? 'Stop recording' : 'Record a voice note'}><svg viewBox="0 0 24 24" width={16} height={16} fill={voiceNoteState.isRecording ? 'red' : 'currentColor'}/><path d="M3 3v2h2l8.59 8.59L17 18l2-2 5.41 5.41L20 7l-5-5-1.41 1.41L7 15l-5-1z"/></svg>{voiceNoteState.isRecording ? ' Recording' : ' Voice Note'}</button>
+          )}
+        </div>
       </form> : <div className="viewer-note">You have view-only access.</div>}
     </main>
   )

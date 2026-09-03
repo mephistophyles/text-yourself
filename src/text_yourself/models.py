@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, StringConstraints
 TopicTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 MessageBody = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000)]
 
+VoiceNoteBase64 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=10_000_000)]
+
 
 class MeResponse(BaseModel):
     user_id: str
@@ -42,6 +44,7 @@ class MessageCreate(BaseModel):
     id: UUID
     body: MessageBody
     reply_to_id: UUID | None = None
+    voice_note_base64: VoiceNoteBase64 | None = None
 
 
 class MessagePatch(BaseModel):
@@ -60,6 +63,7 @@ class Message(BaseModel):
     edited_at: datetime | None
     deleted_at: datetime | None
     sync_version: int
+    voice_note_base64: str | None = None
 
 
 class SyncChange(BaseModel):

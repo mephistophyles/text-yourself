@@ -17,6 +17,7 @@ from .models import (
     Topic,
     TopicCreate,
     TopicPatch,
+    VoiceNoteBase64,
 )
 from .service import MessageService
 
