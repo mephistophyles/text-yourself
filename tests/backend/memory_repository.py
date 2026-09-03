@@ -54,7 +54,7 @@ class MemoryRepository:
         rows.sort(key=lambda row: (row["updated_at"], row["id"]), reverse=True)
         return [dict(row) for row in rows[:limit]], None, len(rows) > limit
 
-    async def create_message(self, identity, message_id, topic_id, body, reply_to_id):
+    async def create_message(self, identity, message_id, topic_id, body, reply_to_id, voice_note_base64: str | None = None):
         if message_id in self.messages:
             return self._safe_message(self.messages[message_id]), False
         if topic_id not in self.topics:
@@ -65,6 +65,7 @@ class MemoryRepository:
             "body": body, "reply_to_id": reply_to_id, "created_at": timestamp,
             "updated_at": timestamp, "edited_at": None, "deleted_at": None,
             "sync_version": version,
+            "voice_note_base64": voice_note_base64,
         }
         self.messages[message_id] = row
         return dict(row), True
