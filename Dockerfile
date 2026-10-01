@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22.22.0-bookworm-slim AS web-builder
+FROM node:26.10.0-bookworm-slim AS web-builder
 
 WORKDIR /build/web
 COPY web/package.json web/package-lock.json ./
